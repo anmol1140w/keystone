@@ -1,0 +1,493 @@
+import { useState, useEffect, useRef } from 'react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
+import { Button } from './ui/button';
+import { Badge } from './ui/badge';
+import { Progress } from './ui/progress';
+import { Slider } from './ui/slider';
+import { Switch } from './ui/switch';
+import { Label } from './ui/label';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import { 
+  Play, Pause, Square, Settings, TrendingUp, Users, MessageCircle, 
+  ThumbsUp, ThumbsDown, Minus, Activity, BarChart3 
+} from 'lucide-react';
+
+interface Comment {
+  id: number;
+  text: string;
+  sentiment: 'positive' | 'negative' | 'neutral';
+  score: number;
+  timestamp: Date;
+  user: string;
+}
+
+interface StreamStats {
+  totalComments: number;
+  positive: number;
+  negative: number;
+  neutral: number;
+  avgSentiment: number;
+}
+
+// Mock comment generator
+const generateRandomComment = (id: number): Comment => {
+  const positiveComments = [
+    "This bill is excellent and will benefit businesses greatly!",
+    "I fully support this initiative. Great work by MCA!",
+    "This amendment addresses our long-standing concerns perfectly.",
+    "Wonderful step towards better corporate governance.",
+    "The digital filing provisions are very helpful for startups.",
+    "This will improve transparency significantly. Well done!",
+    "Great balance between regulation and business freedom.",
+    "This bill shows excellent understanding of industry needs."
+  ];
+
+  const negativeComments = [
+    "This amendment will create unnecessary burden on companies.",
+    "I strongly oppose these changes. Too restrictive!",
+    "The compliance costs will be unbearable for small businesses.",
+    "This bill doesn't address the real issues we're facing.",
+    "The implementation timeline is too aggressive.",
+    "These provisions are poorly drafted and unclear.",
+    "This will harm the startup ecosystem significantly.",
+    "The penalty structure is disproportionate and unfair."
+  ];
+
+  const neutralComments = [
+    "The proposed changes seem reasonable but need more clarity.",
+    "I have mixed feelings about this amendment.",
+    "More consultation with stakeholders would be beneficial.",
+    "The implementation guidelines need to be more detailed.",
+    "Some provisions are good, others need reconsideration.",
+    "The impact on different sectors needs careful assessment.",
+    "More time is needed to evaluate the full implications.",
+    "The bill has both positive and concerning aspects."
+  ];
+
+  const sentiments = ['positive', 'negative', 'neutral'] as const;
+  const randomSentiment = sentiments[Math.floor(Math.random() * sentiments.length)];
+  
+  let commentPool: string[];
+  let score: number;
+
+  switch (randomSentiment) {
+    case 'positive':
+      commentPool = positiveComments;
+      score = Math.random() * 0.5 + 0.5; // 0.5 to 1.0
+      break;
+    case 'negative':
+      commentPool = negativeComments;
+      score = -(Math.random() * 0.5 + 0.5); // -0.5 to -1.0
+      break;
+    default:
+      commentPool = neutralComments;
+      score = (Math.random() - 0.5) * 0.4; // -0.2 to 0.2
+  }
+
+  const userNames = ['Rajesh Kumar', 'Priya Sharma', 'Amit Patel', 'Sneha Gupta', 'Vikram Singh', 'Ananya Das', 'Rohit Verma', 'Kavya Nair'];
+
+  return {
+    id,
+    text: commentPool[Math.floor(Math.random() * commentPool.length)],
+    sentiment: randomSentiment,
+    score,
+    timestamp: new Date(),
+    user: userNames[Math.floor(Math.random() * userNames.length)]
+  };
+};
+
+export function LiveStreamAnalyzer() {
+  const [isStreaming, setIsStreaming] = useState(false);
+  const [comments, setComments] = useState<Comment[]>([]);
+  const [streamSpeed, setStreamSpeed] = useState([2]);
+  const [autoScroll, setAutoScroll] = useState(true);
+  const [stats, setStats] = useState<StreamStats>({
+    totalComments: 0,
+    positive: 0,
+    negative: 0,
+    neutral: 0,
+    avgSentiment: 0
+  });
+  const [sentimentHistory, setSentimentHistory] = useState<Array<{
+    time: string;
+    sentiment: number;
+    positive: number;
+    negative: number;
+    neutral: number;
+  }>>([]);
+  
+  const commentsRef = useRef<HTMLDivElement>(null);
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const commentIdRef = useRef(0);
+
+  const updateStats = (newComments: Comment[]) => {
+    const positive = newComments.filter(c => c.sentiment === 'positive').length;
+    const negative = newComments.filter(c => c.sentiment === 'negative').length;
+    const neutral = newComments.filter(c => c.sentiment === 'neutral').length;
+    const total = newComments.length;
+    const avgSentiment = total > 0 ? newComments.reduce((sum, c) => sum + c.score, 0) / total : 0;
+
+    setStats({
+      totalComments: total,
+      positive,
+      negative,
+      neutral,
+      avgSentiment
+    });
+
+    // Update sentiment history for chart
+    const now = new Date();
+    const timeStr = now.toLocaleTimeString();
+    
+    setSentimentHistory(prev => {
+      const newEntry = {
+        time: timeStr,
+        sentiment: avgSentiment,
+        positive,
+        negative,
+        neutral
+      };
+      
+      const updated = [...prev, newEntry];
+      // Keep only last 20 data points
+      return updated.slice(-20);
+    });
+  };
+
+  const addComment = () => {
+    const newComment = generateRandomComment(commentIdRef.current++);
+    setComments(prev => {
+      const updated = [newComment, ...prev].slice(0, 100); // Keep only last 100 comments
+      updateStats(updated);
+      return updated;
+    });
+
+    if (autoScroll && commentsRef.current) {
+      commentsRef.current.scrollTop = 0;
+    }
+  };
+
+  const startStream = () => {
+    setIsStreaming(true);
+    const intervalTime = Math.max(500, 3000 - (streamSpeed[0] * 400)); // 500ms to 3000ms
+    
+    intervalRef.current = setInterval(addComment, intervalTime);
+  };
+
+  const pauseStream = () => {
+    setIsStreaming(false);
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+  };
+
+  const stopStream = () => {
+    setIsStreaming(false);
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+    setComments([]);
+    setStats({
+      totalComments: 0,
+      positive: 0,
+      negative: 0,
+      neutral: 0,
+      avgSentiment: 0
+    });
+    setSentimentHistory([]);
+    commentIdRef.current = 0;
+  };
+
+  const loadSampleData = () => {
+    // Generate initial sample comments
+    const initialComments = Array.from({ length: 10 }, (_, i) => 
+      generateRandomComment(commentIdRef.current++)
+    );
+    setComments(initialComments);
+    updateStats(initialComments);
+  };
+
+  useEffect(() => {
+    // Update interval when speed changes
+    if (isStreaming && intervalRef.current) {
+      clearInterval(intervalRef.current);
+      const intervalTime = Math.max(500, 3000 - (streamSpeed[0] * 400));
+      intervalRef.current = setInterval(addComment, intervalTime);
+    }
+  }, [streamSpeed[0]]);
+
+  useEffect(() => {
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
+    };
+  }, []);
+
+  const getSentimentIcon = (sentiment: string) => {
+    switch (sentiment) {
+      case 'positive': return <ThumbsUp className="h-4 w-4 text-green-600" />;
+      case 'negative': return <ThumbsDown className="h-4 w-4 text-red-600" />;
+      default: return <Minus className="h-4 w-4 text-gray-600" />;
+    }
+  };
+
+  const getSentimentColor = (sentiment: string) => {
+    switch (sentiment) {
+      case 'positive': return 'bg-green-100 text-green-800 border-green-200';
+      case 'negative': return 'bg-red-100 text-red-800 border-red-200';
+      default: return 'bg-gray-100 text-gray-800 border-gray-200';
+    }
+  };
+
+  const pieChartData = [
+    { name: 'Positive', value: stats.positive, color: '#22c55e' },
+    { name: 'Negative', value: stats.negative, color: '#ef4444' },
+    { name: 'Neutral', value: stats.neutral, color: '#64748b' }
+  ];
+
+  return (
+    <div className="space-y-6">
+      <div className="space-y-4">
+        <h1 className="text-3xl">Live Comment Stream Analyzer</h1>
+        <p className="text-muted-foreground">
+          Monitor real-time comment streams with dynamic sentiment analysis and live visualizations.
+        </p>
+      </div>
+
+      {/* Stream Controls */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center space-x-2">
+            <Activity className="h-5 w-5" />
+            <span>Stream Controls</span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="flex items-center space-x-4">
+            <Button
+              onClick={isStreaming ? pauseStream : startStream}
+              variant={isStreaming ? "secondary" : "default"}
+              className="flex items-center space-x-2"
+            >
+              {isStreaming ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+              <span>{isStreaming ? 'Pause Stream' : 'Start Stream'}</span>
+            </Button>
+            
+            <Button onClick={stopStream} variant="outline">
+              <Square className="h-4 w-4 mr-2" />
+              Stop & Clear
+            </Button>
+
+            <Button onClick={loadSampleData} variant="outline">
+              <MessageCircle className="h-4 w-4 mr-2" />
+              Load Sample
+            </Button>
+
+            <div className="flex items-center space-x-2 ml-auto">
+              <div className={`w-3 h-3 rounded-full ${isStreaming ? 'bg-red-500 animate-pulse' : 'bg-gray-400'}`}></div>
+              <span className="text-sm text-muted-foreground">
+                {isStreaming ? 'Live' : 'Stopped'}
+              </span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-2">
+              <Label>Stream Speed: {streamSpeed[0]}/5</Label>
+              <Slider
+                value={streamSpeed}
+                onValueChange={setStreamSpeed}
+                max={5}
+                min={1}
+                step={1}
+                className="w-full"
+              />
+              <p className="text-xs text-muted-foreground">
+                Adjust how frequently new comments appear
+              </p>
+            </div>
+
+            <div className="flex items-center space-x-2">
+              <Switch
+                id="autoscroll"
+                checked={autoScroll}
+                onCheckedChange={setAutoScroll}
+              />
+              <Label htmlFor="autoscroll">Auto-scroll to new comments</Label>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Live Statistics */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Total Comments</p>
+                <p className="text-2xl font-medium">{stats.totalComments}</p>
+              </div>
+              <Users className="h-6 w-6 text-primary" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Positive</p>
+                <p className="text-2xl font-medium text-green-600">{stats.positive}</p>
+                <Progress 
+                  value={stats.totalComments > 0 ? (stats.positive / stats.totalComments) * 100 : 0} 
+                  className="mt-2 h-2"
+                />
+              </div>
+              <ThumbsUp className="h-6 w-6 text-green-600" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Negative</p>
+                <p className="text-2xl font-medium text-red-600">{stats.negative}</p>
+                <Progress 
+                  value={stats.totalComments > 0 ? (stats.negative / stats.totalComments) * 100 : 0} 
+                  className="mt-2 h-2"
+                />
+              </div>
+              <ThumbsDown className="h-6 w-6 text-red-600" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Avg Sentiment</p>
+                <p className={`text-2xl font-medium ${
+                  stats.avgSentiment > 0 ? 'text-green-600' : 
+                  stats.avgSentiment < 0 ? 'text-red-600' : 'text-gray-600'
+                }`}>
+                  {stats.avgSentiment.toFixed(2)}
+                </p>
+              </div>
+              <BarChart3 className="h-6 w-6 text-muted-foreground" />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Live Charts */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>Sentiment Over Time</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={300}>
+              <LineChart data={sentimentHistory}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="time" />
+                <YAxis domain={[-1, 1]} />
+                <Tooltip />
+                <Line 
+                  type="monotone" 
+                  dataKey="sentiment" 
+                  stroke="#8884d8" 
+                  strokeWidth={2}
+                  dot={{ r: 4 }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Current Distribution</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={300}>
+              <PieChart>
+                <Pie
+                  data={pieChartData}
+                  cx="50%"
+                  cy="50%"
+                  labelLine={false}
+                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                  outerRadius={80}
+                  fill="#8884d8"
+                  dataKey="value"
+                >
+                  {pieChartData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.color} />
+                  ))}
+                </Pie>
+                <Tooltip />
+              </PieChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Live Comments Feed */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center justify-between">
+            <span>Live Comments Feed</span>
+            <Badge variant={isStreaming ? "default" : "secondary"}>
+              {isStreaming ? "Streaming" : "Paused"}
+            </Badge>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div 
+            ref={commentsRef}
+            className="max-h-[500px] overflow-y-auto space-y-3 border rounded-lg p-4 bg-muted/30"
+          >
+            {comments.length === 0 && (
+              <div className="text-center py-8 text-muted-foreground">
+                <MessageCircle className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                <p>No comments yet. Start the stream or load sample data.</p>
+              </div>
+            )}
+            
+            {comments.map((comment) => (
+              <div key={comment.id} className="flex space-x-3 p-3 bg-background rounded-lg border animate-in slide-in-from-top-2">
+                <div className="flex-shrink-0">
+                  {getSentimentIcon(comment.sentiment)}
+                </div>
+                <div className="flex-1 space-y-1">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      <span className="font-medium text-sm">{comment.user}</span>
+                      <Badge className={getSentimentColor(comment.sentiment)}>
+                        {comment.sentiment}
+                      </Badge>
+                    </div>
+                    <span className="text-xs text-muted-foreground">
+                      {comment.timestamp.toLocaleTimeString()}
+                    </span>
+                  </div>
+                  <p className="text-sm">{comment.text}</p>
+                  <div className="text-xs text-muted-foreground">
+                    Score: {comment.score.toFixed(2)}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
