@@ -1,7 +1,6 @@
 
   # Econsultation Services Web App
-
-  This is a code bundle for Econsultation Services Web App. The original project is available at https://www.figma.com/design/zK4n7Rfkt5vfnR5s0meZ71/Econsultation-Services-Web-App.
+  
 
   ## Running the code
 
