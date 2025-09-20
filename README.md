@@ -87,5 +87,4 @@ demo
 └─ vite.config.ts
 
 ```
-# LINK: 
-        keystone-nu-five.vercel.app
+# LINK: [Link text]keystone-nu-five.vercel.app
