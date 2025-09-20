@@ -130,12 +130,11 @@ function AppContent() {
             <div className="flex items-center space-x-4">
               <Building className="h-8 w-8 text-primary" />
               <div>
-                <h1 className="text-xl font-medium">MCA Comment Analysis Platform</h1>
+                <h1 className="text-xl font-medium">MCA Insight Hub</h1>
               </div>
             </div>
             
             <div className="flex items-center space-x-4">
-              <Badge variant="secondary">Ministry of Corporate Affairs</Badge>
               <Badge variant="secondary">Keystone</Badge>
               {/* User Menu */}
               <div className="flex items-center space-x-3">
