@@ -270,6 +270,7 @@ export function WordCloudGenerator() {
         </Card>
       )}
 
+
       {/* Word Frequency Table */}
       {frequencies.length > 0 && (
         <Card>
