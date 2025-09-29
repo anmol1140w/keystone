@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Progress } from './ui/progress';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
 import { ThumbsUp, ThumbsDown, Minus, Upload, Filter } from 'lucide-react';
+import { FileUpload } from './ui/file-upload';
 
 // Backend URL
 const BACKEND_URL = "https://hf-mediator.onrender.com";
@@ -133,10 +134,10 @@ export function SentimentDashboard() {
   };
 
   const chartData = [
-    { name: 'Positive', value: sentimentStats.positive, color: '#22c55e' },
-    { name: 'Negative', value: sentimentStats.negative, color: '#ef4444' },
-    { name: 'Neutral', value: sentimentStats.neutral, color: '#64748b' }
-  ];
+    { name: 'Positive', value: sentimentStats.positive, color: '#22c55e', id: 'positive' },
+    { name: 'Negative', value: sentimentStats.negative, color: '#ef4444', id: 'negative' },
+    { name: 'Neutral', value: sentimentStats.neutral, color: '#64748b', id: 'neutral' }
+  ].filter(item => item.value > 0);
 
   const timeSeriesData = comments.slice(0, 10).reverse().map((c, i) => ({
     id: i + 1,
@@ -168,6 +169,13 @@ export function SentimentDashboard() {
         <p className="text-muted-foreground">
           Analyze the emotional tone of public comments on MCA draft bills and regulations.
         </p>
+        <FileUpload 
+          onFileUpload={(content) => {
+            const lines = content.split('\n').filter(line => line.trim());
+            setInputText(lines.join('\n'));
+          }}
+          label="Upload comments from CSV or Excel file"
+        />
       </div>
 
       {/* Input Section */}
@@ -253,8 +261,8 @@ export function SentimentDashboard() {
                   outerRadius={80}
                   dataKey="value"
                 >
-                  {chartData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
+                  {chartData.map((entry) => (
+                    <Cell key={entry.id} fill={entry.color} />
                   ))}
                 </Pie>
                 <Tooltip />

@@ -6,11 +6,15 @@ import { Progress } from './ui/progress';
 import { Slider } from './ui/slider';
 import { Switch } from './ui/switch';
 import { Label } from './ui/label';
+import { Textarea } from './ui/textarea';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { 
   Play, Pause, Square, Settings, TrendingUp, Users, MessageCircle, 
   ThumbsUp, ThumbsDown, Minus, Activity, BarChart3 
 } from 'lucide-react';
+
+// Backend URL for API calls
+const BACKEND_URL = "https://hf-mediator.onrender.com";
 
 interface Comment {
   id: number;
@@ -29,9 +33,67 @@ interface StreamStats {
   avgSentiment: number;
 }
 
-// Mock comment generator
-const generateRandomComment = (id: number): Comment => {
-  const positiveComments = [
+// API call to analyze sentiment
+async function analyzeSentiment(text: string) {
+  try {
+    const response = await fetch(`${BACKEND_URL}/sentiment`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ comments: [text] })
+    });
+
+    const result = await response.json();
+    const rows: any[] = result?.data?.data || [];
+
+    if (rows.length === 0) {
+      return { sentiment: "neutral", score: 0, confidence: 0 };
+    }
+
+    const row = rows[0];
+    const sentiment = (row[1] ?? "neutral").toLowerCase();
+    const confidence = parseFloat((row[2]?.replace("%", "") ?? 0)) / 100;
+    
+    // Calculate score based on sentiment
+    let score = 0;
+    if (sentiment === 'positive') {
+      score = 0.5 + (confidence * 0.5); // 0.5 to 1.0
+    } else if (sentiment === 'negative') {
+      score = -0.5 - (confidence * 0.5); // -0.5 to -1.0
+    } else {
+      score = (Math.random() - 0.5) * 0.4; // -0.2 to 0.2 for neutral
+    }
+
+    return {
+      sentiment: sentiment as 'positive' | 'negative' | 'neutral',
+      score,
+      confidence
+    };
+  } catch (err) {
+    console.error("Error fetching sentiment:", err);
+    // Fallback to random sentiment if API fails
+    const sentiments = ['positive', 'negative', 'neutral'] as const;
+    const randomSentiment = sentiments[Math.floor(Math.random() * sentiments.length)];
+    let score = 0;
+    
+    if (randomSentiment === 'positive') {
+      score = Math.random() * 0.5 + 0.5;
+    } else if (randomSentiment === 'negative') {
+      score = -(Math.random() * 0.5 + 0.5);
+    } else {
+      score = (Math.random() - 0.5) * 0.4;
+    }
+    
+    return { 
+      sentiment: randomSentiment, 
+      score, 
+      confidence: Math.random() 
+    };
+  }
+}
+
+// Comment generator with API integration
+const generateRandomComment = async (id: number): Promise<Comment> => {
+  const commentPool = [
     "This bill is excellent and will benefit businesses greatly!",
     "I fully support this initiative. Great work by MCA!",
     "This amendment addresses our long-standing concerns perfectly.",
@@ -39,10 +101,7 @@ const generateRandomComment = (id: number): Comment => {
     "The digital filing provisions are very helpful for startups.",
     "This will improve transparency significantly. Well done!",
     "Great balance between regulation and business freedom.",
-    "This bill shows excellent understanding of industry needs."
-  ];
-
-  const negativeComments = [
+    "This bill shows excellent understanding of industry needs.",
     "This amendment will create unnecessary burden on companies.",
     "I strongly oppose these changes. Too restrictive!",
     "The compliance costs will be unbearable for small businesses.",
@@ -50,10 +109,7 @@ const generateRandomComment = (id: number): Comment => {
     "The implementation timeline is too aggressive.",
     "These provisions are poorly drafted and unclear.",
     "This will harm the startup ecosystem significantly.",
-    "The penalty structure is disproportionate and unfair."
-  ];
-
-  const neutralComments = [
+    "The penalty structure is disproportionate and unfair.",
     "The proposed changes seem reasonable but need more clarity.",
     "I have mixed feelings about this amendment.",
     "More consultation with stakeholders would be beneficial.",
@@ -64,33 +120,17 @@ const generateRandomComment = (id: number): Comment => {
     "The bill has both positive and concerning aspects."
   ];
 
-  const sentiments = ['positive', 'negative', 'neutral'] as const;
-  const randomSentiment = sentiments[Math.floor(Math.random() * sentiments.length)];
-  
-  let commentPool: string[];
-  let score: number;
-
-  switch (randomSentiment) {
-    case 'positive':
-      commentPool = positiveComments;
-      score = Math.random() * 0.5 + 0.5; // 0.5 to 1.0
-      break;
-    case 'negative':
-      commentPool = negativeComments;
-      score = -(Math.random() * 0.5 + 0.5); // -0.5 to -1.0
-      break;
-    default:
-      commentPool = neutralComments;
-      score = (Math.random() - 0.5) * 0.4; // -0.2 to 0.2
-  }
-
   const userNames = ['Rajesh Kumar', 'Priya Sharma', 'Amit Patel', 'Sneha Gupta', 'Vikram Singh', 'Ananya Das', 'Rohit Verma', 'Kavya Nair'];
-
+  const text = commentPool[Math.floor(Math.random() * commentPool.length)];
+  
+  // Get sentiment from API
+  const sentimentResult = await analyzeSentiment(text);
+  
   return {
     id,
-    text: commentPool[Math.floor(Math.random() * commentPool.length)],
-    sentiment: randomSentiment,
-    score,
+    text,
+    sentiment: sentimentResult.sentiment as 'positive' | 'negative' | 'neutral',
+    score: sentimentResult.score,
     timestamp: new Date(),
     user: userNames[Math.floor(Math.random() * userNames.length)]
   };
@@ -101,6 +141,7 @@ export function LiveStreamAnalyzer() {
   const [comments, setComments] = useState<Comment[]>([]);
   const [streamSpeed, setStreamSpeed] = useState([2]);
   const [autoScroll, setAutoScroll] = useState(true);
+  const [manualInput, setManualInput] = useState("");
   const [stats, setStats] = useState<StreamStats>({
     totalComments: 0,
     positive: 0,
@@ -154,8 +195,25 @@ export function LiveStreamAnalyzer() {
     });
   };
 
-  const addComment = () => {
-    const newComment = generateRandomComment(commentIdRef.current++);
+  const addComment = async (customText?: string) => {
+    let newComment;
+    
+    if (customText) {
+      // Use custom text if provided
+      const sentimentResult = await analyzeSentiment(customText);
+      newComment = {
+        id: commentIdRef.current++,
+        text: customText,
+        sentiment: sentimentResult.sentiment,
+        score: sentimentResult.score,
+        timestamp: new Date(),
+        user: 'You'
+      };
+    } else {
+      // Otherwise generate random comment
+      newComment = await generateRandomComment(commentIdRef.current++);
+    }
+    
     setComments(prev => {
       const updated = [newComment, ...prev].slice(0, 100); // Keep only last 100 comments
       updateStats(updated);
@@ -200,28 +258,80 @@ export function LiveStreamAnalyzer() {
     commentIdRef.current = 0;
   };
 
-  const loadSampleData = () => {
-    // Generate initial sample comments
-    const initialComments = Array.from({ length: 10 }, (_, i) => 
-      generateRandomComment(commentIdRef.current++)
-    );
-    setComments(initialComments);
-    updateStats(initialComments);
+  const loadSampleData = async () => {
+    // If there's manual input, use it for the first comment
+    if (manualInput.trim()) {
+      const sentimentResult = await analyzeSentiment(manualInput.trim());
+      const manualComment = {
+        id: commentIdRef.current++,
+        text: manualInput.trim(),
+        sentiment: sentimentResult.sentiment,
+        score: sentimentResult.score,
+        timestamp: new Date(),
+        user: 'You'
+      };
+      
+      // Generate the rest of the comments
+      const initialCommentsPromises = Array.from({ length: 9 }, (_, i) => 
+        generateRandomComment(commentIdRef.current++)
+      );
+      const randomComments = await Promise.all(initialCommentsPromises);
+      
+      const initialComments = [manualComment, ...randomComments];
+      setComments(initialComments);
+      updateStats(initialComments as Comment[]);
+      setManualInput(""); // Clear after use
+    } else {
+      // Generate all random comments if no manual input
+      const initialCommentsPromises = Array.from({ length: 10 }, (_, i) => 
+        generateRandomComment(commentIdRef.current++)
+      );
+      const initialComments = await Promise.all(initialCommentsPromises);
+      setComments(initialComments);
+      updateStats(initialComments);
+    }
   };
 
   useEffect(() => {
-    // Update interval when speed changes
-    if (isStreaming && intervalRef.current) {
-      clearInterval(intervalRef.current);
-      const intervalTime = Math.max(500, 3000 - (streamSpeed[0] * 400));
-      intervalRef.current = setInterval(addComment, intervalTime);
+    if (isStreaming) {
+      const simulateStream = async () => {
+        // Use manual input if available, otherwise generate random comment
+        if (manualInput.trim()) {
+          await addComment(manualInput.trim());
+          setManualInput(""); // Clear after use
+        } else {
+          await addComment();
+        }
+        
+        if (isStreaming) {
+          intervalRef.current = setTimeout(simulateStream, 1000 / streamSpeed[0]);
+        }
+      };
+      
+      simulateStream();
+    } else if (intervalRef.current) {
+      clearTimeout(intervalRef.current);
+      intervalRef.current = null;
     }
-  }, [streamSpeed[0]]);
+
+    return () => {
+      if (intervalRef.current) {
+        clearTimeout(intervalRef.current);
+      }
+    };
+  }, [isStreaming, streamSpeed]);
+
+  useEffect(() => {
+    // Load initial data
+    (async () => {
+      await loadSampleData();
+    })();
+  }, []);
 
   useEffect(() => {
     return () => {
       if (intervalRef.current) {
-        clearInterval(intervalRef.current);
+        clearTimeout(intervalRef.current);
       }
     };
   }, []);
@@ -243,10 +353,10 @@ export function LiveStreamAnalyzer() {
   };
 
   const pieChartData = [
-    { name: 'Positive', value: stats.positive, color: '#22c55e' },
-    { name: 'Negative', value: stats.negative, color: '#ef4444' },
-    { name: 'Neutral', value: stats.neutral, color: '#64748b' }
-  ];
+    { name: 'Positive', value: stats.positive, color: '#22c55e', id: 'positive' },
+    { name: 'Negative', value: stats.negative, color: '#ef4444', id: 'negative' },
+    { name: 'Neutral', value: stats.neutral, color: '#64748b', id: 'neutral' }
+  ].filter(item => item.value > 0);
 
   return (
     <div className="space-y-6">
@@ -292,6 +402,15 @@ export function LiveStreamAnalyzer() {
                 {isStreaming ? 'Live' : 'Stopped'}
               </span>
             </div>
+          </div>
+
+          <div className="mt-4">
+            <Textarea
+              placeholder="Enter your comment here for analysis..."
+              value={manualInput}
+              onChange={(e) => setManualInput(e.target.value)}
+              className="w-full"
+            />
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -428,8 +547,8 @@ export function LiveStreamAnalyzer() {
                   fill="#8884d8"
                   dataKey="value"
                 >
-                  {pieChartData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
+                  {pieChartData.map((entry) => (
+                    <Cell key={entry.id} fill={entry.color} />
                   ))}
                 </Pie>
                 <Tooltip />

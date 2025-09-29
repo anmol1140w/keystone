@@ -5,6 +5,7 @@ import { Textarea } from './ui/textarea';
 import { Badge } from './ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { FileText, Sparkles, Copy, Download, RotateCcw } from 'lucide-react';
+import { FileUpload } from './ui/file-upload';
 
 // Change this to your Render backend URL
 const API_BASE = "https://hf-mediator.onrender.com";
@@ -98,6 +99,10 @@ try {
         <p className="text-muted-foreground">
           Generate concise summaries of public feedback and identify key themes.
         </p>
+        <FileUpload 
+          onFileUpload={(content) => setInputText(content)}
+          label="Upload comments from CSV or Excel file"
+        />
       </div>
 
       {/* Input Section */}

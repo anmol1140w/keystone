@@ -12,6 +12,7 @@ import { Cloud, Download, RotateCcw, Settings, Upload } from "lucide-react";
 import * as d3 from "d3";
 import cloud from "d3-cloud";
 import html2canvas from "html2canvas";
+import { FileUpload } from "./ui/file-upload";
 
 // Stopwords
 const stopWords = new Set([
@@ -225,6 +226,10 @@ export function WordCloudGenerator() {
         <p className="text-muted-foreground">
           Create visual representations of frequently mentioned terms.
         </p>
+        <FileUpload 
+          onFileUpload={(content) => setInputText(content)}
+          label="Upload comments from CSV or Excel file"
+        />
       </div>
 
       {/* Input Section */}

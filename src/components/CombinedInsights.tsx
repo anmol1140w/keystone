@@ -208,10 +208,10 @@ export function CombinedInsights() {
   };
 
   const sentimentChartData = analysisResults ? [
-    { name: 'Positive', value: analysisResults.sentiment.positive, color: '#22c55e' },
-    { name: 'Negative', value: analysisResults.sentiment.negative, color: '#ef4444' },
-    { name: 'Neutral', value: analysisResults.sentiment.neutral, color: '#64748b' }
-  ] : [];
+    { name: 'Positive', value: analysisResults.sentiment.positive, color: '#22c55e', id: 'positive' },
+    { name: 'Negative', value: analysisResults.sentiment.negative, color: '#ef4444', id: 'negative' },
+    { name: 'Neutral', value: analysisResults.sentiment.neutral, color: '#64748b', id: 'neutral' }
+  ].filter(item => item.value > 0) : [];
 
   const wordFreqChartData = analysisResults ? 
     analysisResults.wordFreq.slice(0, 10).map(([word, count]) => ({ word, count })) : [];
@@ -379,8 +379,8 @@ export function CombinedInsights() {
                             fill="#8884d8"
                             dataKey="value"
                           >
-                            {sentimentChartData.map((entry, index) => (
-                              <Cell key={`cell-${index}`} fill={entry.color} />
+                            {sentimentChartData.map((entry) => (
+                              <Cell key={entry.id} fill={entry.color} />
                             ))}
                           </Pie>
                           <Tooltip />
