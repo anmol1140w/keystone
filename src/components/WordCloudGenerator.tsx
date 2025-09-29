@@ -30,6 +30,7 @@ interface WordData {
   x: number;
   y: number;
   rotate: number;
+  radius: number;
 }
 
 const getWordFrequency = (text: string, removeStopWords: boolean) => {
@@ -58,7 +59,8 @@ const colors = {
   green: ["#10b981", "#059669", "#047857", "#065f46", "#064e3b"],
   purple: ["#8b5cf6", "#7c3aed", "#6d28d9", "#5b21b6", "#4c1d95"],
   orange: ["#f97316", "#ea580c", "#dc2626", "#b91c1c", "#991b1b"],
-  mixed: ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6"]
+  mixed: ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6"],
+  gov: ["#1a4480", "#005ea2", "#0b4778", "#2672de", "#73b3e7"]
 };
 
 const sampleText = `
@@ -80,11 +82,13 @@ public consultation comments analysis sentiment summarization word cloud visuali
 export function WordCloudGenerator() {
   const [inputText, setInputText] = useState("");
   const [removeStopWords, setRemoveStopWords] = useState(true);
-  const [colorScheme, setColorScheme] = useState("mixed");
+  const [colorScheme, setColorScheme] = useState("gov");
   const [minWordLength, setMinWordLength] = useState([3]);
-  const [maxWords, setMaxWords] = useState([50]);
+  const [maxWords, setMaxWords] = useState([10]);
   const [frequencies, setFrequencies] = useState<[string, number][]>([]);
   const [wordCloudData, setWordCloudData] = useState<WordData[]>([]);
+  const [maxWordCount, setMaxWordCount] = useState(1);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const cloudRef = useRef<HTMLDivElement>(null);
 
   const generateWordCloud = () => {
@@ -97,35 +101,67 @@ export function WordCloudGenerator() {
     setFrequencies(wordFreqs);
 
     const maxCount = Math.max(...wordFreqs.map(([, c]) => c));
-    const minSize = 15, maxSize = 60;
+    setMaxWordCount(maxCount || 1);
+    const minSize = 12, maxSize = 36;
     const palette = colors[colorScheme as keyof typeof colors] || colors.mixed;
 
     cloud()
-      .size([600, 400])
+      .size([1000, 650])
       .words(
-        wordFreqs.map(([text, count], i) => ({
-          text,
-          count,
-          size: minSize + ((count / maxCount) * (maxSize - minSize)),
-          color: palette[i % palette.length]
-        }))
+        wordFreqs.map(([text, count], i) => {
+          const size = minSize + ((count / maxCount) * (maxSize - minSize));
+          const approxTextWidth = 0.6 * size * text.length;
+          const baseRadius = Math.max(14, size * 1.0);
+          const bubbleRadius = Math.max(baseRadius, approxTextWidth / 2 + 10);
+          // Cap the radius used for padding to avoid over-spacing large words
+          const paddingRadius = Math.min(bubbleRadius, 110);
+          const adjustedRadius = Math.max(12, paddingRadius * 0.92);
+          return {
+            text,
+            count,
+            size,
+            color: palette[i % palette.length],
+            radius: adjustedRadius
+          } as any;
+        })
       )
-      .padding(5)
-      .rotate(() => (Math.random() > 0.5 ? 0 : 90))
+      // Keep padding modest so multiple bubbles can be placed
+      .padding(10)
+      .rotate(() => 0)
       .font("Impact")
       .fontSize((d: any) => d.size)
       .on("end", (words: any[]) => {
-        setWordCloudData(
-          words.map((w) => ({
-            text: w.text,
-            count: w.count,
-            size: w.size,
-            color: w.color,
-            x: w.x,
-            y: w.y,
-            rotate: w.rotate
-          }))
-        );
+        const width = 1000, height = 650;
+        const halfW = width / 2, halfH = height / 2;
+
+        // Build nodes with explicit radius for collision handling
+        const nodes: WordData[] = words.map((w: any) => ({
+          text: w.text,
+          count: w.count,
+          size: w.size,
+          color: w.color,
+          x: w.x,
+          y: w.y,
+          rotate: w.rotate,
+          radius: w.radius ?? w.bubbleRadius ?? Math.max(14, (w.size || 16) * 1.0)
+        }));
+
+        // Collision resolution to avoid overlapping bubbles
+        const sim = d3.forceSimulation(nodes as any)
+          .force("collide", d3.forceCollide((d: any) => (d.radius || 16) + 6))
+          .force("x", d3.forceX(0).strength(0.02))
+          .force("y", d3.forceY(0).strength(0.02))
+          .stop();
+
+        for (let i = 0; i < 200; i++) sim.tick();
+
+        // Clamp to canvas bounds (coordinates are relative to center)
+        nodes.forEach((n) => {
+          n.x = Math.max(-halfW + n.radius, Math.min(halfW - n.radius, n.x));
+          n.y = Math.max(-halfH + n.radius, Math.min(halfH - n.radius, n.y));
+        });
+
+        setWordCloudData(nodes);
       })
       .start();
   };
@@ -135,6 +171,34 @@ export function WordCloudGenerator() {
     setInputText("");
     setWordCloudData([]);
     setFrequencies([]);
+  };
+
+  const handleUploadDatasetClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleUploadDatasetChange = async (e: import("react").ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const raw = await file.text();
+    let combined = "";
+    try {
+      const json = JSON.parse(raw);
+      if (Array.isArray(json)) {
+        combined = json
+          .map((item) => {
+            if (typeof item === "string") return item;
+            if (item && typeof item === "object" && "text" in item) return (item as any).text || "";
+            return "";
+          })
+          .join(" \n ");
+      } else {
+        combined = raw; // fallback to raw text
+      }
+    } catch {
+      combined = raw; // not JSON, treat as plain text/CSV
+    }
+    setInputText(combined);
   };
 
   const handleExport = async () => {
@@ -184,6 +248,16 @@ export function WordCloudGenerator() {
               <Button variant="outline" onClick={handleLoadSample}>
                 <Upload className="h-4 w-4 mr-2" /> Load Sample
               </Button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".txt,.csv,.json"
+                className="hidden"
+                onChange={handleUploadDatasetChange}
+              />
+              <Button variant="outline" onClick={handleUploadDatasetClick}>
+                <Upload className="h-4 w-4 mr-2" /> Upload Dataset
+              </Button>
               <Button variant="outline" onClick={handleReset}>
                 <RotateCcw className="h-4 w-4 mr-2" /> Reset
               </Button>
@@ -219,6 +293,7 @@ export function WordCloudGenerator() {
                 <SelectItem value="green">Green</SelectItem>
                 <SelectItem value="purple">Purple</SelectItem>
                 <SelectItem value="orange">Orange</SelectItem>
+                <SelectItem value="gov">Government</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -228,7 +303,7 @@ export function WordCloudGenerator() {
           </div>
           <div className="space-y-2">
             <Label>Max Words: {maxWords[0]}</Label>
-            <Slider value={maxWords} onValueChange={setMaxWords} max={100} min={10} step={5} />
+            <Slider value={maxWords} onValueChange={setMaxWords} max={15} min={1} step={1} />
           </div>
         </CardContent>
       </Card>
@@ -243,32 +318,116 @@ export function WordCloudGenerator() {
             </Button>
           </CardHeader>
           <CardContent>
-            <div ref={cloudRef} className="relative w-full h-[400px] bg-muted/20 border rounded overflow-hidden flex items-center justify-center">
-              <svg width={600} height={400}>
-                <g transform="translate(300,200)">
-                  {wordCloudData.map((word, i) => (
-                    <text
-                      key={i}
-                      textAnchor="middle"
-                      transform={`translate(${word.x},${word.y}) rotate(${word.rotate})`}
-                      style={{
-                        fontSize: word.size,
-                        fill: word.color,
-                        fontFamily: "Impact",
-                        cursor: "pointer",
-                        fontWeight: "bold"
-                      }}
-                      title={`${word.text}: ${word.count}`}
-                    >
-                      {word.text}
-                    </text>
-                  ))}
-                </g>
-              </svg>
+            <div ref={cloudRef} className="relative w-full h-[650px] bg-muted/20 border rounded overflow-hidden flex items-center justify-center">
+              <svg width={1000} height={650}>
+                <g transform="translate(500,325)">
+                  {wordCloudData.map((word, i) => {
+                    const fontSize = word.size;
+                    const r = word.radius || Math.max(14, fontSize * 1.0);
+                    const density = Math.max(0.1, word.count / maxWordCount);
+                    // Professional gov-style: moderate brightening for clean, accessible contrast
+                    const centerFill = (d3.color(word.color)?.brighter(2.0 + (1.0 - density) * 2.0)?.formatHex()) || word.color;
+                    const edgeFill = (d3.color(word.color)?.brighter(1.0 + (1.0 - density) * 1.0)?.formatHex()) || word.color;
+                    const gradId = `bubble-grad-${i}`;
+                    const floatDuration = 7 + (i % 5) * 1.2;
+                    const floatDelay = -(i % 7) * 0.4;
+                    const filterId = `droplet-filter-${i}`;
+                    const centerOpacity = 0.9 - (density * 0.15);
+                    const edgeOpacity = 0.55 - (density * 0.1);
+                    return (
+                      <g
+                        key={i}
+                        transform={`translate(${word.x},${word.y}) rotate(${word.rotate})`}
+                        className="transition-transform hover:scale-105"
+                        title={`${word.text}: ${word.count}`}
+                      >
+                        <defs>
+                          <radialGradient id={gradId} cx="50%" cy="40%" r="75%">
+                            <stop offset="0%" stopColor={centerFill} stopOpacity={centerOpacity} />
+                            <stop offset="100%" stopColor={edgeFill} stopOpacity={edgeOpacity} />
+                          </radialGradient>
+                          {/* Glassy droplet specular highlight */}
+                          <filter id={filterId} x="-50%" y="-50%" width="200%" height="200%">
+                            <feGaussianBlur in="SourceAlpha" stdDeviation="2" result="blur" />
+                            <feSpecularLighting in="blur" surfaceScale="2" specularConstant="0.6" specularExponent="18" lighting-color="#ffffff" result="spec">
+                              <fePointLight x="-30" y="-30" z="60" />
+                            </feSpecularLighting>
+                            <feComposite in="spec" in2="SourceAlpha" operator="in" result="specOut" />
+                            <feMerge>
+                              <feMergeNode in="SourceGraphic" />
+                              <feMergeNode in="specOut" />
+                            </feMerge>
+                          </filter>
+                        </defs>
+                        <g
+                          className="bubble-float"
+                          style={{
+                            animationDuration: `${floatDuration}s`,
+                            animationDelay: `${floatDelay}s`,
+                            transformOrigin: "center center",
+                          }}
+                          filter={`url(#${filterId})`}
+                        >
+                          <circle
+                            r={r}
+                            fill={`url(#${gradId})`}
+                            opacity="1"
+                            stroke="rgba(0,0,0,0.06)"
+                            strokeWidth={1 + density * 1.5}
+                            style={{ filter: `drop-shadow(0 6px 12px rgba(0,0,0,${0.09 + density * 0.14}))` }}
+                          />
+                          {/* highlight */}
+                          <circle
+                            r={r * 0.4}
+                            cx={-r * 0.35}
+                            cy={-r * 0.35}
+                            fill="#ffffff"
+                            opacity={0.16 + (1.0 - density) * 0.16}
+                          />
+                          {/* glossy arc highlight */}
+                          <ellipse
+                            rx={r * 0.55}
+                            ry={r * 0.32}
+                            cx={-r * 0.2}
+                            cy={-r * 0.55}
+                            fill="#ffffff"
+                            opacity={0.10 + (1.0 - density) * 0.12}
+                          />
+                          <text
+                            textAnchor="middle"
+                            dy="0.35em"
+                            style={{
+                              fontSize: Math.min(fontSize, r * 0.95),
+                              fill: "#000000",
+                              fontFamily:
+                                "Inter, system-ui, -apple-system, Segoe UI, Roboto, 'Helvetica Neue', Arial",
+                              fontWeight: density > 0.7 ? 800 : 700,
+                              pointerEvents: "none"
+                            }}
+                          >
+                            {word.text}
+                          </text>
+                        </g>
+                      </g>
+                    );
+                  })}
+              </g>
+            </svg>
+          </div>
+            <div className="mt-2 flex items-center space-x-4 text-xs text-muted-foreground">
+              <div className="flex items-center space-x-2">
+              <span className="inline-block h-3 w-3 rounded-full" style={{ background: '#73b3e7', boxShadow: '0 0 0 1px rgba(0,0,0,0.15)' }}></span>
+              <span>Lower density</span>
+              </div>
+              <div className="flex items-center space-x-2">
+              <span className="inline-block h-3 w-3 rounded-full" style={{ background: '#1a4480', boxShadow: '0 0 0 2px rgba(0,0,0,0.25)' }}></span>
+              <span>Higher density</span>
+              </div>
+              <span>Size and color intensity reflect word frequency</span>
             </div>
-          </CardContent>
-        </Card>
-      )}
+        </CardContent>
+      </Card>
+    )}
 
 
       {/* Word Frequency Table */}

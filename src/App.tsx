@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './components/ui/card';
 import { Button } from './components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './components/ui/tabs';
@@ -99,14 +99,8 @@ function AppContent() {
       case 'wordcloud':
         return <WordCloudGenerator />;
       case 'combined':
-        return (
-          <ProtectedRoute 
-            requiredPermissions={['view_detailed_analytics', 'view_all_analyses']}
-            fallbackMessage="Combined insights require detailed analytics permissions."
-          >
-            <CombinedInsights />
-          </ProtectedRoute>
-        );
+        // Allow Combined Insights for all users per requirement
+        return <CombinedInsights />;
       case 'livestream':
         return (
           <ProtectedRoute 
@@ -117,7 +111,7 @@ function AppContent() {
           </ProtectedRoute>
         );
       default:
-        return <HomePage />;
+        return <HomePage onViewAnalysis={() => setCurrentView('combined')} />;
     }
   };
 
@@ -213,8 +207,18 @@ function AppContent() {
   );
 }
 
-function HomePage() {
+function HomePage({ onViewAnalysis }: { onViewAnalysis: () => void }) {
   const { user, hasPermission } = useAuth();
+  const recentStats = useMemo(() => {
+    const make = () => {
+      const comments = Math.floor(300 + Math.random() * 3000);
+      const positive = Math.floor(40 + Math.random() * 50); // 40-90%
+      const negativeBase = Math.floor(5 + Math.random() * 40); // 5-45%
+      const negative = Math.min(negativeBase, 100 - positive - 5); // leave room for neutral
+      return { comments, positive, negative };
+    };
+    return Array.from({ length: 6 }, make);
+  }, []);
   
   return (
     <div className="space-y-8">
@@ -494,7 +498,7 @@ function HomePage() {
       {/* Recent Bills Section */}
       <div className="space-y-4">
         <h2 className="text-2xl text-primary">Recent Draft Bills & Consultations</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           <Card>
             <CardHeader>
               <CardTitle className="text-lg">Companies (Amendment) Bill 2024</CardTitle>
@@ -503,18 +507,20 @@ function HomePage() {
             <CardContent>
               <div className="flex justify-between items-center">
                 <div className="space-y-1">
-                  <p className="text-sm">Total Comments: 1,247</p>
+                  <p className="text-sm">Total Comments: {recentStats[0].comments}</p>
                   <div className="flex space-x-2">
-                    <Badge variant="outline" className="text-green-600">Positive: 67%</Badge>
-                    <Badge variant="outline" className="text-red-600">Negative: 23%</Badge>
+                    <Badge variant="outline" className="text-green-600">Positive: {recentStats[0].positive}%</Badge>
+                    <Badge variant="outline" className="text-red-600">Negative: {recentStats[0].negative}%</Badge>
                   </div>
                 </div>
-                <PermissionBasedFeature 
-                  requiredPermissions={['view_detailed_analytics', 'view_all_analyses']}
-                  fallback={<Badge variant="outline">View Only</Badge>}
+                {/* Make View Analysis button black and available to all users */}
+                <Button 
+                  size="sm" 
+                  className="bg-black text-white hover:bg-black/90"
+                  onClick={onViewAnalysis}
                 >
-                  <Button size="sm">View Analysis</Button>
-                </PermissionBasedFeature>
+                  View Analysis
+                </Button>
               </div>
             </CardContent>
           </Card>
@@ -527,21 +533,124 @@ function HomePage() {
             <CardContent>
               <div className="flex justify-between items-center">
                 <div className="space-y-1">
-                  <p className="text-sm">Total Comments: 892</p>
+                  <p className="text-sm">Total Comments: {recentStats[1].comments}</p>
                   <div className="flex space-x-2">
-                    <Badge variant="outline" className="text-green-600">Positive: 74%</Badge>
-                    <Badge variant="outline" className="text-red-600">Negative: 16%</Badge>
+                    <Badge variant="outline" className="text-green-600">Positive: {recentStats[1].positive}%</Badge>
+                    <Badge variant="outline" className="text-red-600">Negative: {recentStats[1].negative}%</Badge>
                   </div>
                 </div>
-                <PermissionBasedFeature 
-                  requiredPermissions={['view_detailed_analytics', 'view_all_analyses']}
-                  fallback={<Badge variant="outline">View Only</Badge>}
+                {/* Make View Analysis button black and available to all users */}
+                <Button 
+                  size="sm" 
+                  className="bg-black text-white hover:bg-black/90"
+                  onClick={onViewAnalysis}
                 >
-                  <Button size="sm">View Analysis</Button>
-                </PermissionBasedFeature>
+                  View Analysis
+                </Button>
               </div>
             </CardContent>
           </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Insolvency and Bankruptcy Code (Amendment) Bill, 2025</CardTitle>
+              <CardDescription>Introduced in Lok Sabha (2025)</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex justify-between items-center">
+                <div className="space-y-1">
+                  <p className="text-sm">Total Comments: {recentStats[2].comments}</p>
+                  <div className="flex space-x-2">
+                    <Badge variant="outline" className="text-green-600">Positive: {recentStats[2].positive}%</Badge>
+                    <Badge variant="outline" className="text-red-600">Negative: {recentStats[2].negative}%</Badge>
+                  </div>
+                </div>
+                <Button 
+                  size="sm" 
+                  className="bg-black text-white hover:bg-black/90"
+                  onClick={onViewAnalysis}
+                >
+                  View Analysis
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Companies (Accounts) Second Amendment Rules, 2025</CardTitle>
+              <CardDescription>Public consultation update (2025)</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex justify-between items-center">
+                <div className="space-y-1">
+                  <p className="text-sm">Total Comments: {recentStats[3].comments}</p>
+                  <div className="flex space-x-2">
+                    <Badge variant="outline" className="text-green-600">Positive: {recentStats[3].positive}%</Badge>
+                    <Badge variant="outline" className="text-red-600">Negative: {recentStats[3].negative}%</Badge>
+                  </div>
+                </div>
+                <Button 
+                  size="sm" 
+                  className="bg-black text-white hover:bg-black/90"
+                  onClick={onViewAnalysis}
+                >
+                  View Analysis
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Companies (Restriction on Number of Layers) Amendment Rules, 2025</CardTitle>
+              <CardDescription>Draft amendment update (2025)</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex justify-between items-center">
+                <div className="space-y-1">
+                  <p className="text-sm">Total Comments: {recentStats[4].comments}</p>
+                  <div className="flex space-x-2">
+                    <Badge variant="outline" className="text-green-600">Positive: {recentStats[4].positive}%</Badge>
+                    <Badge variant="outline" className="text-red-600">Negative: {recentStats[4].negative}%</Badge>
+                  </div>
+                </div>
+                <Button 
+                  size="sm" 
+                  className="bg-black text-white hover:bg-black/90"
+                  onClick={onViewAnalysis}
+                >
+                  View Analysis
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">IBBI (Insolvency Resolution Process for Corporate Persons) (Fourth Amendment) Regulations, 2025</CardTitle>
+              <CardDescription>Regulations update (May 26, 2025)</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex justify-between items-center">
+                <div className="space-y-1">
+                  <p className="text-sm">Total Comments: {recentStats[5].comments}</p>
+                  <div className="flex space-x-2">
+                    <Badge variant="outline" className="text-green-600">Positive: {recentStats[5].positive}%</Badge>
+                    <Badge variant="outline" className="text-red-600">Negative: {recentStats[5].negative}%</Badge>
+                  </div>
+                </div>
+                <Button 
+                  size="sm" 
+                  className="bg-black text-white hover:bg-black/90"
+                  onClick={onViewAnalysis}
+                >
+                  View Analysis
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
         </div>
       </div>
     </div>

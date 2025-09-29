@@ -12,46 +12,10 @@ import {
   ThumbsUp, ThumbsDown, Minus, Sparkles, RefreshCw 
 } from 'lucide-react';
 
-// Import analysis functions (simplified versions)
-const analyzeSentiment = (text: string) => {
-  const words = text.toLowerCase().split(/\s+/);
-  let score = 0;
-  
-  const positiveWords = ['good', 'excellent', 'great', 'support', 'beneficial', 'positive', 'agree', 'helpful', 'useful', 'improvement'];
-  const negativeWords = ['bad', 'terrible', 'oppose', 'against', 'negative', 'disagree', 'harmful', 'useless', 'wrong', 'problem'];
-  
-  words.forEach(word => {
-    if (positiveWords.includes(word)) score += 1;
-    if (negativeWords.includes(word)) score -= 1;
-  });
-  
-  const sentiment = score > 0 ? 'positive' : score < 0 ? 'negative' : 'neutral';
-  return { sentiment, score, confidence: Math.min(Math.abs(score) / words.length * 10, 1) };
-};
+// Backend API base (FastAPI)
+const API_BASE = "https://hf-mediator.onrender.com";
 
-const summarizeText = (text: string) => {
-  const sentences = text.split(/[.!?]+/).filter(s => s.trim().length > 0);
-  const targetSentences = Math.max(2, Math.ceil(sentences.length * 0.3));
-  
-  // Simple extractive summarization
-  const keyTerms = ['bill', 'amendment', 'regulation', 'corporate', 'company', 'business'];
-  const scoredSentences = sentences.map((sentence, index) => {
-    let score = 0;
-    const words = sentence.toLowerCase().split(/\s+/);
-    keyTerms.forEach(term => {
-      if (words.some(word => word.includes(term))) score += 2;
-    });
-    if (index < sentences.length * 0.3) score += 1;
-    return { sentence: sentence.trim(), score, index };
-  });
-  
-  const topSentences = scoredSentences
-    .sort((a, b) => b.score - a.score)
-    .slice(0, targetSentences)
-    .sort((a, b) => a.index - b.index);
-  
-  return topSentences.map(item => item.sentence).join('. ') + '.';
-};
+// Heuristic word frequency (local)
 
 const getWordFrequency = (text: string) => {
   const stopWords = new Set(['the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by']);
@@ -93,43 +57,127 @@ export function CombinedInsights() {
   } | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
 
+  // --- Helpers: backend calls ---
+  const lexicalScore = (text: string) => {
+    const words = text.toLowerCase().split(/\s+/);
+    let score = 0;
+    const positiveWords = ['good', 'excellent', 'great', 'support', 'beneficial', 'positive', 'agree', 'helpful', 'useful', 'improvement'];
+    const negativeWords = ['bad', 'terrible', 'oppose', 'against', 'negative', 'disagree', 'harmful', 'useless', 'wrong', 'problem'];
+    words.forEach(word => {
+      if (positiveWords.includes(word)) score += 1;
+      if (negativeWords.includes(word)) score -= 1;
+    });
+    return score;
+  };
+
+  async function fetchBackendSentiment(comments: string[]) {
+    try {
+      const response = await fetch(`${API_BASE}/sentiment`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ comments })
+      });
+      const result = await response.json();
+      const rows: any[] = result?.data?.data || [];
+
+      const analyzedComments = comments.map((text, i) => {
+        const row = rows[i] || [];
+        const sentiment = String((row[1] ?? 'neutral')).toLowerCase();
+        // optional confidence parsing if needed later
+        // const confidence = parseFloat((row[2]?.replace('%', '') ?? 0)) / 100;
+        return {
+          id: i,
+          text,
+          sentiment,
+          score: lexicalScore(text)
+        };
+      });
+
+      const sentimentStats = {
+        positive: analyzedComments.filter(c => c.sentiment === 'positive').length,
+        negative: analyzedComments.filter(c => c.sentiment === 'negative').length,
+        neutral: analyzedComments.filter(c => c.sentiment === 'neutral').length,
+        total: analyzedComments.length
+      };
+
+      return { analyzedComments, sentimentStats };
+    } catch (err) {
+      console.error('Error fetching backend sentiment:', err);
+      const analyzedComments = comments.map((text, i) => ({ id: i, text, sentiment: 'neutral', score: 0 }));
+      const sentimentStats = { positive: 0, negative: 0, neutral: analyzedComments.length, total: analyzedComments.length };
+      return { analyzedComments, sentimentStats };
+    }
+  }
+
+  async function fetchBackendSummary(comments: string[]) {
+    try {
+      const response = await fetch(`${API_BASE}/summary`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ comments })
+      });
+      const data = await response.json();
+
+      // Robust parsing similar to CommentSummarizer
+      let parsedSummary = '';
+      try {
+        if (typeof data.summary === 'string') {
+          const match = data.summary.match(/'summary':\s*'([^']+)'/);
+          if (match) {
+            parsedSummary = match[1];
+          } else {
+            const normalized = data.summary
+              .replace(/'/g, '"')
+              .replace(/None/g, 'null')
+              .replace(/True/g, 'true')
+              .replace(/False/g, 'false');
+            const inner = JSON.parse(normalized);
+            parsedSummary = inner.summary || normalized;
+          }
+        } else if (typeof data.summary === 'object') {
+          parsedSummary = data.summary.summary || '';
+        } else {
+          parsedSummary = String(data.summary);
+        }
+      } catch (err) {
+        console.error('Failed to parse backend summary:', err);
+        parsedSummary = String(data.summary);
+      }
+
+      return parsedSummary;
+    } catch (err) {
+      console.error('Error fetching backend summary:', err);
+      return '';
+    }
+  }
+
   const handleAnalyze = async () => {
     if (!inputText.trim()) return;
-    
+
     setIsProcessing(true);
-    
-    // Simulate processing time
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    
-    // Split into individual comments (by line breaks or periods)
-    const comments = inputText.split(/\n\n|\.\s+(?=[A-Z])/).filter(c => c.trim().length > 20);
-    
-    // Analyze each comment
-    const analyzedComments = comments.map((comment, index) => ({
-      id: index,
-      text: comment.trim(),
-      ...analyzeSentiment(comment)
-    }));
-    
-    // Generate overall insights
-    const sentimentStats = {
-      positive: analyzedComments.filter(c => c.sentiment === 'positive').length,
-      negative: analyzedComments.filter(c => c.sentiment === 'negative').length,
-      neutral: analyzedComments.filter(c => c.sentiment === 'neutral').length,
-      total: analyzedComments.length
-    };
-    
-    const summary = summarizeText(inputText);
-    const wordFreq = getWordFrequency(inputText);
-    
-    setAnalysisResults({
-      sentiment: sentimentStats,
-      summary,
-      wordFreq,
-      comments: analyzedComments
-    });
-    
-    setIsProcessing(false);
+    try {
+      // Split into individual comments (by line breaks)
+      const comments = inputText
+        .split(/\n+/)
+        .map(l => l.trim())
+        .filter(l => l.length > 0);
+
+      const [sentimentRes, summaryText] = await Promise.all([
+        fetchBackendSentiment(comments),
+        fetchBackendSummary(comments)
+      ]);
+
+      const wordFreq = getWordFrequency(inputText);
+
+      setAnalysisResults({
+        sentiment: sentimentRes.sentimentStats,
+        summary: summaryText,
+        wordFreq,
+        comments: sentimentRes.analyzedComments
+      });
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const handleLoadSample = () => {
@@ -199,9 +247,9 @@ export function CombinedInsights() {
               {inputText ? `${inputText.trim().split(/\s+/).length} words, ${inputText.split(/\n\n/).filter(l => l.trim()).length} comments` : 'No input'}
             </div>
             <div className="flex space-x-2">
-              <Button variant="outline" onClick={handleLoadSample}>
+              <Button variant="outline" onClick={handleLoadSample} disabled={isProcessing}>
                 <Upload className="h-4 w-4 mr-2" />
-                Load Sample
+                Load Sample Data
               </Button>
               <Button variant="outline" onClick={handleReset}>
                 <RefreshCw className="h-4 w-4 mr-2" />

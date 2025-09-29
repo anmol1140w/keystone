@@ -79,6 +79,7 @@ export function SentimentDashboard() {
     normalizedScore: number;
   }>>([]);
   const [filter, setFilter] = useState('all');
+  const [isProcessing, setIsProcessing] = useState(false);
 
   // --- Load sample comments on mount ---
   // useEffect(() => {
@@ -98,32 +99,28 @@ export function SentimentDashboard() {
   // --- Single/multi-line input analysis ---
   const handleAnalyze = async () => {
     if (!inputText.trim()) return;
+    setIsProcessing(true);
+    try {
+      const lines = inputText.split('\n').map(l => l.trim()).filter(l => l);
+      const results = await Promise.all(lines.map(line => analyzeSentiment(line)));
 
-    const lines = inputText.split('\n').map(l => l.trim()).filter(l => l);
-    const results = await Promise.all(lines.map(line => analyzeSentiment(line)));
+      const newComments = lines.map((line, i) => ({
+        id: `${comments.length + i}-${Math.random()}`,
+        text: line,
+        ...results[i]
+      }));
 
-    const newComments = lines.map((line, i) => ({
-      id: `${comments.length + i}-${Math.random()}`,
-      text: line,
-      ...results[i]
-    }));
-
-    setComments(prev => [...newComments, ...prev]);
-    setInputText('');
+      setComments(prev => [...newComments, ...prev]);
+      setInputText('');
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
-  // --- Bulk upload ---
-  const handleBulkUpload = async () => {
+  // --- Load sample into input (no analysis) ---
+  const handleBulkUpload = () => {
     const sample = sampleComments.slice(0, 5);
-    const results = await Promise.all(sample.map(c => analyzeSentiment(c)));
-
-    const newComments = sample.map((text, i) => ({
-      id: `${comments.length + i}-${Math.random()}`,
-      text,
-      ...results[i]
-    }));
-
-    setComments(prev => [...newComments, ...prev]);
+    setInputText(sample.join('\n'));
   };
 
   const filteredComments = comments.filter(c => filter === 'all' || c.sentiment === filter);
@@ -187,8 +184,10 @@ export function SentimentDashboard() {
             rows={4}
           />
           <div className="flex space-x-2">
-            <Button onClick={handleAnalyze} disabled={!inputText.trim()}>Analyze Sentiment</Button>
-            <Button variant="outline" onClick={handleBulkUpload}>
+            <Button onClick={handleAnalyze} disabled={!inputText.trim() || isProcessing}>
+              {isProcessing ? 'Processing...' : 'Analyze Sentiment'}
+            </Button>
+            <Button variant="outline" onClick={handleBulkUpload} disabled={isProcessing}>
               <Upload className="h-4 w-4 mr-2" />Load Sample Data
             </Button>
           </div>
