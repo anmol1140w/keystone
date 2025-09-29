@@ -1,10 +1,14 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './components/ui/card';
 import { Button } from './components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './components/ui/tabs';
 import { Badge } from './components/ui/badge';
-import { Avatar, AvatarFallback } from './components/ui/avatar';
-import { MessageCircle, BarChart3, FileText, Cloud, TrendingUp, Users, Building, User, LogOut } from 'lucide-react';
+import { Avatar, AvatarFallback, AvatarImage } from './components/ui/avatar';
+import { 
+  MessageCircle, BarChart3, FileText, Cloud, TrendingUp, 
+  Users, Building, User, LogOut, Menu, X, ChevronRight,
+  Shield, Bell, Settings, HelpCircle, Home
+} from 'lucide-react';
 import { SentimentDashboard } from './components/SentimentDashboard';
 import { CommentSummarizer } from './components/CommentSummarizer';
 import { WordCloudGenerator } from './components/WordCloudGenerator';
@@ -15,198 +19,7 @@ import { LoginPage } from './components/LoginPage';
 import { UserProfile } from './components/UserProfile';
 import { ProtectedRoute, RoleBasedFeature, PermissionBasedFeature } from './components/ProtectedRoute';
 
-function AppContent() {
-  const { user, logout, isAuthenticated, hasPermission } = useAuth();
-  const [currentView, setCurrentView] = useState('home');
-  const [showProfile, setShowProfile] = useState(false);
-
-  if (!isAuthenticated) {
-    return <LoginPage />;
-  }
-
-  const getInitials = (name: string) => {
-    return name.split(' ').map(n => n[0]).join('').toUpperCase();
-  };
-
-  const navigationItems = [
-    { 
-      id: 'home', 
-      label: 'MCA e-Consultation', 
-      icon: Building,
-      permissions: [] // Everyone can access home
-    },
-    { 
-      id: 'sentiment', 
-      label: 'Sentiment Analysis', 
-      icon: BarChart3,
-      permissions: ['view_analyses', 'view_all_analyses']
-    },
-    { 
-      id: 'summarizer', 
-      label: 'Comment Summarizer', 
-      icon: FileText,
-      permissions: ['view_analyses', 'view_all_analyses']
-    },
-    { 
-      id: 'wordcloud', 
-      label: 'Word Cloud', 
-      icon: Cloud,
-      permissions: ['view_basic_analyses', 'view_analyses', 'view_all_analyses']
-    },
-    { 
-      id: 'combined', 
-      label: 'Combined Insights', 
-      icon: TrendingUp,
-      permissions: ['view_detailed_analytics', 'view_all_analyses']
-    },
-    { 
-      id: 'livestream', 
-      label: 'Live Stream', 
-      icon: Users,
-      permissions: ['view_detailed_analytics', 'view_all_analyses']
-    },
-  ];
-
-  // Filter navigation items based on permissions
-  const availableNavItems = navigationItems.filter(item => 
-    item.permissions.length === 0 || item.permissions.some(permission => hasPermission(permission))
-  );
-
-  const renderView = () => {
-    if (showProfile) {
-      return <UserProfile />;
-    }
-
-    switch (currentView) {
-      case 'sentiment':
-        return (
-          <ProtectedRoute 
-            requiredPermissions={['view_analyses', 'view_all_analyses']}
-            fallbackMessage="Sentiment analysis requires view access permissions."
-          >
-            <SentimentDashboard />
-          </ProtectedRoute>
-        );
-      case 'summarizer':
-        return (
-          <ProtectedRoute 
-            requiredPermissions={['view_analyses', 'view_all_analyses']}
-            fallbackMessage="Comment summarizer requires view access permissions."
-          >
-            <CommentSummarizer />
-          </ProtectedRoute>
-        );
-      case 'wordcloud':
-        return <WordCloudGenerator />;
-      case 'combined':
-        // Allow Combined Insights for all users per requirement
-        return <CombinedInsights />;
-      case 'livestream':
-        return (
-          <ProtectedRoute 
-            requiredPermissions={['view_detailed_analytics', 'view_all_analyses']}
-            fallbackMessage="Live stream analyzer requires detailed analytics permissions."
-          >
-            <LiveStreamAnalyzer />
-          </ProtectedRoute>
-        );
-      default:
-        return <HomePage onViewAnalysis={() => setCurrentView('combined')} />;
-    }
-  };
-
-  return (
-    <div className="min-h-screen bg-background">
-      {/* Navigation Header */}
-      <header className="border-b bg-card shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <div className="flex items-center space-x-4">
-              <Building className="h-8 w-8 text-primary" />
-              <div>
-                <h1 className="text-xl font-medium">MCA Insight Hub</h1>
-              </div>
-            </div>
-            
-            <div className="flex items-center space-x-4">
-              <Badge variant="secondary">Keystone</Badge>
-              {/* User Menu */}
-              <div className="flex items-center space-x-3">
-                <div className="text-right hidden md:block">
-                  <p className="text-sm font-medium">{user?.name}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {user?.role.replace('_', ' ').toUpperCase()}
-                  </p>
-                </div>
-                
-                <Avatar 
-                  className="h-8 w-8 cursor-pointer hover:ring-2 hover:ring-primary transition-all"
-                  onClick={() => setShowProfile(!showProfile)}
-                >
-                  <AvatarFallback className="text-sm">
-                    {user ? getInitials(user.name) : 'U'}
-                  </AvatarFallback>
-                </Avatar>
-                
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  onClick={logout}
-                  className="flex items-center space-x-1"
-                >
-                  <LogOut className="h-4 w-4" />
-                  <span className="hidden md:inline">Sign Out</span>
-                </Button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </header>
-
-      {/* Navigation Tabs */}
-      <div className="border-b bg-muted/30">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex space-x-1 overflow-x-auto py-2">
-            {availableNavItems.map((item) => {
-              const Icon = item.icon;
-              return (
-                <Button
-                  key={item.id}
-                  variant={(currentView === item.id && !showProfile) ? 'default' : 'ghost'}
-                  size="sm"
-                  onClick={() => {
-                    setCurrentView(item.id);
-                    setShowProfile(false);
-                  }}
-                  className="flex items-center space-x-2 whitespace-nowrap"
-                >
-                  <Icon className="h-4 w-4" />
-                  <span>{item.label}</span>
-                </Button>
-              );
-            })}
-            
-            <Button
-              variant={showProfile ? 'default' : 'ghost'}
-              size="sm"
-              onClick={() => setShowProfile(!showProfile)}
-              className="flex items-center space-x-2 whitespace-nowrap ml-auto"
-            >
-              <User className="h-4 w-4" />
-              <span>Profile</span>
-            </Button>
-          </div>
-        </div>
-      </div>
-
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {renderView()}
-      </main>
-    </div>
-  );
-}
-
+// Define HomePage component
 function HomePage({ onViewAnalysis }: { onViewAnalysis: () => void }) {
   const { user, hasPermission } = useAuth();
   const recentStats = useMemo(() => {
@@ -472,37 +285,57 @@ function HomePage({ onViewAnalysis }: { onViewAnalysis: () => void }) {
           </Card>
         </PermissionBasedFeature>
 
-        <Card className="hover:shadow-lg transition-shadow">
-          <CardHeader>
-            <div className="flex items-center space-x-3">
-              <div className="p-2 bg-primary/10 rounded-lg">
-                <MessageCircle className="h-6 w-6 text-primary" />
+        {/* Administrative Tools */}
+        <PermissionBasedFeature 
+          requiredPermissions={['manage_consultations', 'admin_access']}
+          fallback={
+            <Card className="opacity-50">
+              <CardHeader>
+                <div className="flex items-center space-x-3">
+                  <div className="p-2 bg-gray-100 rounded-lg">
+                    <Building className="h-6 w-6 text-gray-400" />
+                  </div>
+                  <CardTitle className="text-gray-500">Administrative Tools</CardTitle>
+                </div>
+                <CardDescription>
+                  <Badge variant="outline" className="text-xs">Admin Only</Badge>
+                </CardDescription>
+              </CardHeader>
+            </Card>
+          }
+        >
+          <Card className="hover:shadow-lg transition-shadow">
+            <CardHeader>
+              <div className="flex items-center space-x-3">
+                <div className="p-2 bg-primary/10 rounded-lg">
+                  <Building className="h-6 w-6 text-primary" />
+                </div>
+                <CardTitle>Administrative Tools</CardTitle>
               </div>
-              <CardTitle>Public Consultation</CardTitle>
-            </div>
-            <CardDescription>
-              Access to draft bills and documents for public feedback collection.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ul className="space-y-2 text-sm text-muted-foreground">
-              <li>• Draft bill repository</li>
-              <li>• Comment submission portal</li>
-              <li>• Stakeholder engagement</li>
-              <li>• Feedback categorization</li>
-            </ul>
-          </CardContent>
-        </Card>
+              <CardDescription>
+                Manage consultations, users, and system settings.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ul className="space-y-2 text-sm text-muted-foreground">
+                <li>• User management</li>
+                <li>• Consultation creation</li>
+                <li>• System configuration</li>
+                <li>• Access control</li>
+              </ul>
+            </CardContent>
+          </Card>
+        </PermissionBasedFeature>
       </div>
 
-      {/* Recent Bills Section */}
+      {/* Recent Consultations */}
       <div className="space-y-4">
-        <h2 className="text-2xl text-primary">Recent Draft Bills & Consultations</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <h2 className="text-2xl font-semibold">Recent Consultations</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">Companies (Amendment) Bill 2024</CardTitle>
-              <CardDescription>Comments due: March 15, 2024</CardDescription>
+              <CardTitle className="text-lg">Companies (Corporate Social Responsibility Policy) Amendment Rules, 2025</CardTitle>
+              <CardDescription>Public consultation open until June 30, 2025</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="flex justify-between items-center">
@@ -513,7 +346,6 @@ function HomePage({ onViewAnalysis }: { onViewAnalysis: () => void }) {
                     <Badge variant="outline" className="text-red-600">Negative: {recentStats[0].negative}%</Badge>
                   </div>
                 </div>
-                {/* Make View Analysis button black and available to all users */}
                 <Button 
                   size="sm" 
                   className="bg-black text-white hover:bg-black/90"
@@ -527,8 +359,8 @@ function HomePage({ onViewAnalysis }: { onViewAnalysis: () => void }) {
 
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">Corporate Social Responsibility Rules</CardTitle>
-              <CardDescription>Comments due: March 30, 2024</CardDescription>
+              <CardTitle className="text-lg">Limited Liability Partnership (Amendment) Rules, 2025</CardTitle>
+              <CardDescription>Public consultation open until July 15, 2025</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="flex justify-between items-center">
@@ -539,7 +371,6 @@ function HomePage({ onViewAnalysis }: { onViewAnalysis: () => void }) {
                     <Badge variant="outline" className="text-red-600">Negative: {recentStats[1].negative}%</Badge>
                   </div>
                 </div>
-                {/* Make View Analysis button black and available to all users */}
                 <Button 
                   size="sm" 
                   className="bg-black text-white hover:bg-black/90"
@@ -553,8 +384,8 @@ function HomePage({ onViewAnalysis }: { onViewAnalysis: () => void }) {
 
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">Insolvency and Bankruptcy Code (Amendment) Bill, 2025</CardTitle>
-              <CardDescription>Introduced in Lok Sabha (2025)</CardDescription>
+              <CardTitle className="text-lg">Companies (Significant Beneficial Owners) Amendment Rules, 2025</CardTitle>
+              <CardDescription>Public consultation closed (May 15, 2025)</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="flex justify-between items-center">
@@ -650,8 +481,322 @@ function HomePage({ onViewAnalysis }: { onViewAnalysis: () => void }) {
               </div>
             </CardContent>
           </Card>
-
         </div>
+      </div>
+    </div>
+  );
+}
+
+function AppContent() {
+  const { user, logout, isAuthenticated, hasPermission } = useAuth();
+  const [currentView, setCurrentView] = useState('home');
+  const [showProfile, setShowProfile] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [isMobile, setIsMobile] = useState(false);
+
+  // Check if screen is mobile
+  useEffect(() => {
+    const checkIfMobile = () => {
+      setIsMobile(window.innerWidth < 1024);
+      if (window.innerWidth < 1024) {
+        setSidebarOpen(false);
+      }
+    };
+    
+    checkIfMobile();
+    window.addEventListener('resize', checkIfMobile);
+    
+    return () => {
+      window.removeEventListener('resize', checkIfMobile);
+    };
+  }, []);
+
+  if (!isAuthenticated) {
+    return <LoginPage />;
+  }
+
+  const getInitials = (name: string) => {
+    return name.split(' ').map(n => n[0]).join('').toUpperCase();
+  };
+
+  const navigationItems = [
+    { 
+      id: 'home', 
+      label: 'Dashboard', 
+      icon: Home,
+      permissions: [] // Everyone can access home
+    },
+    { 
+      id: 'sentiment', 
+      label: 'Sentiment Analysis', 
+      icon: BarChart3,
+      permissions: ['view_analyses', 'view_all_analyses']
+    },
+    { 
+      id: 'summarizer', 
+      label: 'Comment Summarizer', 
+      icon: FileText,
+      permissions: ['view_analyses', 'view_all_analyses']
+    },
+    { 
+      id: 'wordcloud', 
+      label: 'Word Cloud', 
+      icon: Cloud,
+      permissions: ['view_basic_analyses', 'view_analyses', 'view_all_analyses']
+    },
+    { 
+      id: 'combined', 
+      label: 'Combined Insights', 
+      icon: TrendingUp,
+      permissions: ['view_detailed_analytics', 'view_all_analyses']
+    },
+    { 
+      id: 'livestream', 
+      label: 'Live Stream', 
+      icon: Users,
+      permissions: ['view_detailed_analytics', 'view_all_analyses']
+    },
+  ];
+
+  // Filter navigation items based on permissions
+  const availableNavItems = navigationItems.filter(item => 
+    item.permissions.length === 0 || item.permissions.some(permission => hasPermission(permission))
+  );
+
+  const renderView = () => {
+    if (showProfile) {
+      return <UserProfile />;
+    }
+
+    switch (currentView) {
+      case 'sentiment':
+        return (
+          <ProtectedRoute 
+            requiredPermissions={['view_analyses', 'view_all_analyses']}
+            fallbackMessage="Sentiment analysis requires view access permissions."
+          >
+            <SentimentDashboard />
+          </ProtectedRoute>
+        );
+      case 'summarizer':
+        return (
+          <ProtectedRoute 
+            requiredPermissions={['view_analyses', 'view_all_analyses']}
+            fallbackMessage="Comment summarizer requires view access permissions."
+          >
+            <CommentSummarizer />
+          </ProtectedRoute>
+        );
+      case 'wordcloud':
+        return <WordCloudGenerator />;
+      case 'combined':
+        // Allow Combined Insights for all users per requirement
+        return <CombinedInsights />;
+      case 'livestream':
+        return (
+          <ProtectedRoute 
+            requiredPermissions={['view_detailed_analytics', 'view_all_analyses']}
+            fallbackMessage="Live stream analyzer requires detailed analytics permissions."
+          >
+            <LiveStreamAnalyzer />
+          </ProtectedRoute>
+        );
+      default:
+        return <HomePage onViewAnalysis={() => setCurrentView('combined')} />;
+    }
+  };
+
+  return (
+    <div className="flex h-screen bg-gray-50">
+      {/* Sidebar */}
+      <div 
+        className={`${
+          sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+        } fixed inset-y-0 left-0 z-50 w-64 bg-[#0e2c5c] transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-auto lg:h-screen`}
+      >
+        {/* Sidebar Header with Government Logo */}
+        <div className="flex h-16 items-center justify-between px-4 border-b border-blue-700">
+          <div className="flex items-center space-x-2">
+            <Shield className="h-8 w-8 text-primary" />
+            <div>
+              <h1 className="text-lg font-bold">MCA Insight Hub</h1>
+              <p className="text-xs">Government of India</p>
+            </div>
+          </div>
+          {isMobile && (
+            <button onClick={() => setSidebarOpen(false)} className="lg:hidden">
+              <X className="h-5 w-5" />
+            </button>
+          )}
+        </div>
+
+        {/* User Profile Section */}
+        <div className="p-4 border-b border-blue-700 bg-[#0a2348]">
+          <div className="flex items-center space-x-3">
+            <Avatar className="h-12 w-12">
+              <AvatarFallback className="bg-primary/10">
+                {user ? getInitials(user.name) : 'U'}
+              </AvatarFallback>
+            </Avatar>
+            <div>
+              <p className="font-medium">{user?.name}</p>
+              <p className="text-xs">
+                {user?.role.replace('_', ' ').toUpperCase()}
+              </p>
+              <Badge variant="outline" className="mt-1 text-xs">
+                Keystone
+              </Badge>
+            </div>
+          </div>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={() => setShowProfile(!showProfile)}
+            className="mt-3 w-full"
+          >
+            View Profile
+          </Button>
+        </div>
+
+        {/* Navigation Links */}
+        <nav className="p-2">
+          <ul className="space-y-1">
+            {availableNavItems.map((item) => {
+              const Icon = item.icon;
+              const isActive = currentView === item.id && !showProfile;
+              
+              return (
+                <li key={item.id}>
+                  <button
+                    onClick={() => {
+                      setCurrentView(item.id);
+                      setShowProfile(false);
+                      if (isMobile) setSidebarOpen(false);
+                    }}
+                    className={`flex items-center w-full px-3 py-2 rounded-md transition-colors ${
+                      isActive 
+                        ? 'bg-primary/10' 
+                        : 'hover:bg-primary/5'
+                    }`}
+                  >
+                    <Icon className={`h-5 w-5 mr-3 ${isActive ? 'text-primary' : ''}`} />
+                    <span>{item.label}</span>
+                    {isActive && <ChevronRight className="h-4 w-4 ml-auto" />}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+          
+          <div className="mt-6 pt-6 border-t border-blue-700">
+            <ul className="space-y-1">
+              <li>
+                <button className="flex items-center w-full px-3 py-2 rounded-md transition-colors hover:bg-primary/5">
+                  <Settings className="h-5 w-5 mr-3" />
+                  <span>Settings</span>
+                </button>
+              </li>
+              <li>
+                <button className="flex items-center w-full px-3 py-2 rounded-md transition-colors hover:bg-primary/5">
+                  <HelpCircle className="h-5 w-5 mr-3" />
+                  <span>Help & Support</span>
+                </button>
+              </li>
+              <li>
+                <button 
+                  onClick={logout}
+                  className="flex items-center w-full px-3 py-2 rounded-md transition-colors hover:bg-destructive/10"
+                >
+                  <LogOut className="h-5 w-5 mr-3 text-destructive" />
+                  <span>Logout</span>
+                </button>
+              </li>
+            </ul>
+          </div>
+        </nav>
+      </div>
+
+      {/* Main Content */}
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Top Header */}
+        <header className="bg-white border-b shadow-sm z-10">
+          <div className="px-4 h-16 flex items-center justify-between">
+            <div className="flex items-center">
+              {isMobile && (
+                <button 
+                  onClick={() => setSidebarOpen(true)} 
+                  className="mr-4 lg:hidden"
+                >
+                  <Menu className="h-6 w-6" />
+                </button>
+              )}
+              <h2 className="text-xl font-semibold text-gray-800">
+                {showProfile ? 'User Profile' : availableNavItems.find(item => item.id === currentView)?.label || 'Dashboard'}
+              </h2>
+            </div>
+            
+            <div className="flex items-center space-x-4">
+              <button className="p-1.5 rounded-full bg-gray-100 hover:bg-gray-200 transition-colors">
+                <Bell className="h-5 w-5 text-gray-600" />
+              </button>
+              
+              <div className="hidden md:flex items-center space-x-2">
+                <div className="text-right">
+                  <p className="text-sm font-medium">{user?.name}</p>
+                  <p className="text-xs text-gray-500">
+                    {user?.role.replace('_', ' ').toUpperCase()}
+                  </p>
+                </div>
+                
+                <Avatar 
+                  className="h-8 w-8 cursor-pointer hover:ring-2 hover:ring-blue-500 transition-all"
+                  onClick={() => setShowProfile(!showProfile)}
+                >
+                  <AvatarFallback className="bg-blue-700 text-white">
+                    {user ? getInitials(user.name) : 'U'}
+                  </AvatarFallback>
+                </Avatar>
+              </div>
+            </div>
+          </div>
+        </header>
+
+        {/* Main Content Area */}
+        <main className="flex-1 overflow-auto p-6 bg-gray-50">
+          <div className="max-w-7xl mx-auto">
+            {/* Breadcrumb */}
+            <div className="mb-4 flex items-center text-sm text-gray-500">
+              <span>MCA Insight Hub</span>
+              <ChevronRight className="h-4 w-4 mx-1" />
+              <span className="font-medium text-gray-700">
+                {showProfile ? 'User Profile' : availableNavItems.find(item => item.id === currentView)?.label || 'Dashboard'}
+              </span>
+            </div>
+            
+            {/* Content Container with Government Style */}
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+              <div className="border-b border-gray-200 bg-gradient-to-r from-blue-700 to-blue-600 py-4 px-6">
+                <h3 className="text-lg font-semibold text-white">
+                  {showProfile ? 'User Profile' : availableNavItems.find(item => item.id === currentView)?.label || 'Dashboard'}
+                </h3>
+              </div>
+              
+              <div className="p-6">
+                {renderView()}
+              </div>
+            </div>
+            
+            {/* Government Footer */}
+            <footer className="mt-8 text-center text-sm text-gray-500">
+              <div className="flex justify-center items-center space-x-2 mb-2">
+                <Shield className="h-4 w-4" />
+                <span className="font-semibold">Ministry of Corporate Affairs</span>
+              </div>
+              <p>Government of India • Digital India Initiative</p>
+              <p className="mt-1">© {new Date().getFullYear()} All Rights Reserved</p>
+            </footer>
+          </div>
+        </main>
       </div>
     </div>
   );

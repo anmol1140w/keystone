@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
@@ -13,8 +13,15 @@ import {
   ThumbsUp, ThumbsDown, Minus, Activity, BarChart3 
 } from 'lucide-react';
 
-// Backend URL for API calls
-const BACKEND_URL = "https://hf-mediator.onrender.com";
+// Backend URL for API calls - using local fallback since remote API is failing
+// const BACKEND_URL = "https://hf-mediator.onrender.com";
+const USE_LOCAL_FALLBACK = true; // Set to true to use local fallback instead of remote API
+
+// Cache to store sentiment analysis results and prevent duplicate API calls
+const sentimentCache = new Map();
+
+// Global AbortController to cancel pending requests
+let activeRequestController: AbortController | null = null;
 
 interface Comment {
   id: number;
@@ -35,11 +42,24 @@ interface StreamStats {
 
 // API call to analyze sentiment
 async function analyzeSentiment(text: string) {
+  // Create a new AbortController for this request
+  if (activeRequestController) {
+    activeRequestController.abort(); // Cancel any previous request
+  }
+  activeRequestController = new AbortController();
+  
+  // Use local fallback mechanism to avoid API errors
+  if (USE_LOCAL_FALLBACK) {
+    return getLocalSentimentAnalysis(text);
+  }
+  
   try {
+    const BACKEND_URL = "https://hf-mediator.onrender.com"; // Only used if not using fallback
     const response = await fetch(`${BACKEND_URL}/sentiment`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ comments: [text] })
+      body: JSON.stringify({ comments: [text] }),
+      signal: activeRequestController.signal
     });
 
     const result = await response.json();
@@ -70,26 +90,56 @@ async function analyzeSentiment(text: string) {
     };
   } catch (err) {
     console.error("Error fetching sentiment:", err);
-    // Fallback to random sentiment if API fails
-    const sentiments = ['positive', 'negative', 'neutral'] as const;
-    const randomSentiment = sentiments[Math.floor(Math.random() * sentiments.length)];
-    let score = 0;
-    
-    if (randomSentiment === 'positive') {
-      score = Math.random() * 0.5 + 0.5;
-    } else if (randomSentiment === 'negative') {
-      score = -(Math.random() * 0.5 + 0.5);
-    } else {
-      score = (Math.random() - 0.5) * 0.4;
-    }
-    
-    return { 
-      sentiment: randomSentiment, 
-      score, 
-      confidence: Math.random() 
-    };
+    return getLocalSentimentAnalysis(text);
   }
 }
+
+// Local sentiment analysis fallback
+function getLocalSentimentAnalysis(text: string) {
+  // Simple keyword-based sentiment analysis
+  const positiveWords = ['good', 'great', 'excellent', 'wonderful', 'amazing', 'support', 'benefit', 'helpful', 'improve'];
+  const negativeWords = ['bad', 'poor', 'terrible', 'awful', 'oppose', 'burden', 'restrictive', 'unnecessary', 'concern'];
+  
+  text = text.toLowerCase();
+  let positiveCount = 0;
+  let negativeCount = 0;
+  
+  // Count positive and negative words
+  positiveWords.forEach(word => {
+    if (text.includes(word)) positiveCount++;
+  });
+  
+  negativeWords.forEach(word => {
+    if (text.includes(word)) negativeCount++;
+  });
+  
+  // Determine sentiment based on word counts
+  let sentiment: 'positive' | 'negative' | 'neutral';
+  let score = 0;
+  let confidence = 0;
+  
+  if (positiveCount > negativeCount) {
+    sentiment = 'positive';
+    confidence = Math.min(0.5 + (positiveCount - negativeCount) * 0.1, 0.9);
+    score = 0.5 + (confidence * 0.5);
+  } else if (negativeCount > positiveCount) {
+    sentiment = 'negative';
+    confidence = Math.min(0.5 + (negativeCount - positiveCount) * 0.1, 0.9);
+    score = -(0.5 + (confidence * 0.5));
+  } else {
+    // If no keywords or equal counts, use random sentiment with lower confidence
+    sentiment = 'neutral';
+    confidence = 0.3 + Math.random() * 0.2;
+    score = (Math.random() - 0.5) * 0.4;
+  }
+  
+  return { 
+    sentiment, 
+    score, 
+    confidence 
+  };
+}
+// (no code needed – the stray closing brace was simply removed)
 
 // Comment generator with API integration
 const generateRandomComment = async (id: number): Promise<Comment> => {
@@ -227,25 +277,40 @@ export function LiveStreamAnalyzer() {
 
   const startStream = () => {
     setIsStreaming(true);
-    const intervalTime = Math.max(500, 3000 - (streamSpeed[0] * 400)); // 500ms to 3000ms
-    
-    intervalRef.current = setInterval(addComment, intervalTime);
   };
 
   const pauseStream = () => {
     setIsStreaming(false);
+    
+    // Clear the interval but don't reset other state
     if (intervalRef.current) {
-      clearInterval(intervalRef.current);
+      clearTimeout(intervalRef.current);
       intervalRef.current = null;
+    }
+    
+    // Cancel any pending API requests
+    if (activeRequestController) {
+      activeRequestController.abort();
+      activeRequestController = null;
     }
   };
 
   const stopStream = () => {
     setIsStreaming(false);
+    
+    // Cancel any pending API requests
+    if (activeRequestController) {
+      activeRequestController.abort();
+      activeRequestController = null;
+    }
+    
+    // Clear any pending timeouts
     if (intervalRef.current) {
-      clearInterval(intervalRef.current);
+      clearTimeout(intervalRef.current);
       intervalRef.current = null;
     }
+    
+    // Reset all state
     setComments([]);
     setStats({
       totalComments: 0,
@@ -295,21 +360,19 @@ export function LiveStreamAnalyzer() {
   useEffect(() => {
     if (isStreaming) {
       const simulateStream = async () => {
-        // Use manual input if available, otherwise generate random comment
-        if (manualInput.trim()) {
-          await addComment(manualInput.trim());
-          setManualInput(""); // Clear after use
-        } else {
-          await addComment();
-        }
+        // Only generate random comments in the automatic stream
+        await addComment();
         
+        // Only schedule next comment if still streaming
         if (isStreaming) {
           intervalRef.current = setTimeout(simulateStream, 1000 / streamSpeed[0]);
         }
       };
       
+      // Start the simulation process
       simulateStream();
     } else if (intervalRef.current) {
+      // Clear any pending timeouts when not streaming
       clearTimeout(intervalRef.current);
       intervalRef.current = null;
     }
@@ -321,12 +384,7 @@ export function LiveStreamAnalyzer() {
     };
   }, [isStreaming, streamSpeed]);
 
-  useEffect(() => {
-    // Load initial data
-    (async () => {
-      await loadSampleData();
-    })();
-  }, []);
+  // Removed automatic data loading on component mount
 
   useEffect(() => {
     return () => {
@@ -404,13 +462,25 @@ export function LiveStreamAnalyzer() {
             </div>
           </div>
 
-          <div className="mt-4">
+          <div className="mt-4 space-y-2">
             <Textarea
               placeholder="Enter your comment here for analysis..."
               value={manualInput}
               onChange={(e) => setManualInput(e.target.value)}
               className="w-full"
             />
+            <Button 
+              onClick={() => {
+                if (manualInput.trim()) {
+                  addComment(manualInput.trim());
+                  setManualInput(""); // Clear after submission
+                }
+              }}
+              variant="default"
+              className="w-full"
+            >
+              Submit Comment
+            </Button>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
